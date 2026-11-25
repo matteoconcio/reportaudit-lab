@@ -31,4 +31,5 @@ python app/servicio.py            # http://127.0.0.1:8080
 | `requirements.txt` | *Lockfile*: TODAS las dependencias, directas y transitivas, con versión exacta |
 
 Autor/a: Matteo Concio
+
 Profesor: Dr. Richard Avilés López
