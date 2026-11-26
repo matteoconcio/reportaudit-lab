@@ -20,7 +20,7 @@
 | 4 | `hash_password_legacy` | reporte_auditoria.py:57 | **Hash débil**: MD5 sin sal ni iteraciones. Es rápido de calcular y dos contraseñas iguales dan el mismo hash | Parámetro `password` de la función | `hashlib.md5(...)` (reporte_auditoria.py:57) |
 | 5 | Constantes globales (usadas en `notificar_cliente`) | reporte_auditoria.py:21-22 (y 62) | **Secretos en el código**: `NOTIFICATION_API_KEY` y `SMTP_PASSWORD` escritas en claro en un repositorio público; además la línea 62 escribe parte de la clave en el log | El propio código fuente versionado en Git | Cualquiera que lea el repositorio o su historial; salida de log en línea 62 |
 
-**Impacto en elnegocio:**
+**Impacto en el negocio:**
 
 1. **Inyección SQL:** un atacante podría leer los reportes de auditoría de todos los clientes (por ejemplo con `' OR '1'='1`), rompiendo la confidencialidad entre clientes, y potencialmente alterar la base de datos. Es el hallazgo más grave junto con el 2.
 2. **Inyección de comandos:** con `archivo=x; <comando>` cualquiera ejecutaría órdenes en el servidor con los permisos del servicio: robo de `reportes.db`, de credenciales o control total de la máquina.
@@ -29,6 +29,10 @@
 5. **Secretos expuestos:** al ser el repositorio público, cualquiera puede usar la API de notificaciones en nombre de la empresa y enviar correos desde la cuenta SMTP (p. ej. *phishing* a los clientes con remitente legítimo). Borrar las líneas no basta: siguen en el historial de Git, así que hay que **rotar** ambas credenciales.
 
 ---
+
+## Incidencia de proceso (Parte G)
+
+El 26/11 hice dos commits directos en main desde el editor web de GitHub (ea776b1 y 5cb7485, solo el nombre del autor en el README). GitHub los permitió porque la regla de protección no impedía que el administrador se la saltara. Medida correctora: activé «Do not allow bypassing the above settings»; desde entonces todo cambio entra por Pull Request. Scorecard lo refleja en Code-Review (7/10).
 
 ## SonarQube Cloud
 **Organization Key:** matteoconcio
@@ -110,7 +114,7 @@ Syft, Grype y Trivy instalados con `scripts/instalar_herramientas.py` en version
 
 **Conclusión del triage:** ninguna es explotable hoy porque ReportAudit no usa las funciones afectadas (sin plantillas, sin sesión, sin formularios, sin `safe_join`, depurador apagado). Aun así se actualiza todo: hay versión corregida, el coste es bajo (PR de Dependabot preparado) y basta un cambio futuro (activar `debug`, añadir una plantilla) para que pasen a ser explotables.
 
-**Comparación con Dependabot** (Parte I): pendiente de que Dependabot procese el grafo de dependencias.
+**Comparación con Dependabot** (Parte I): el grafo de dependencias de GitHub detecta los mismos 13 componentes que el SBOM de Syft (9 de pip, 2 directos y 7 transitivos, y 4 acciones). Dependabot tardó varias horas en generar las alertas tras activarse (13 alertas en werkzeug, jinja2 y flask), mientras que Grype y Trivy, con base de datos propia, dieron la información en el momento. Coinciden en los paquetes afectados y en las versiones corregidas; Dependabot, además, abrió el PR #20 que las corrige.
 
 **Documento VEX:** [docs/evidencias/reportaudit.openvex.json](evidencias/reportaudit.openvex.json). Declara `not_affected` para CVE-2024-34069 en `pkg:pypi/werkzeug@3.0.1` con justificación `vulnerable_code_not_in_execute_path`: la vulnerabilidad solo afecta al depurador interactivo y ReportAudit arranca con `debug=False` (`app/servicio.py`, línea 64). Se actualiza igualmente con el PR de Dependabot.
 
@@ -149,7 +153,7 @@ Trivy (`trivy fs --scanners vuln,secret`, salida en [docs/evidencias/trivy-antes
 | Security Hotspots por revisar en SonarQube Cloud | n/a: concepto retirado; ahora son issues | 0 (CSRF revisado como *False positive*) |
 | Vulnerabilidades de Grype sobre el SBOM | 13 (1 High, 11 Medium, 1 Low) | 0 |
 | Vulnerabilidades de Trivy en `requirements.txt` | 13 | 0 |
-| Alertas abiertas de Dependabot | N | 0 |
+| Alertas abiertas de Dependabot | 13 | 0 (cerradas al fusionar #20) |
 | Secretos en el historial (Gitleaks con regla propia) | 2 | 0 (2 rotados y registrados en la baseline) |
 
 Evidencias: [SBOM antes](evidencias/sbom.cyclonedx.json) / [después](evidencias/sbom-despues.cyclonedx.json), [Grype antes](evidencias/grype-antes.txt) / [después](evidencias/grype-despues.txt), [Trivy antes](evidencias/trivy-antes.txt) / [después](evidencias/trivy-despues.txt), [VEX](evidencias/reportaudit.openvex.json), [Gitleaks](evidencias/gitleaks-historial.json).
@@ -184,6 +188,8 @@ Evidencias: [SBOM antes](evidencias/sbom.cyclonedx.json) / [después](evidencias
 
 13. **Alerta de Dependabot vs. check SCA - pip-audit.** La alerta de Dependabot informa de una dependencia vulnerable ya presente en el repositorio y propone un PR con la corrección, pero no impide fusionar nada. El check obligatorio pip-audit actúa en cada PR antes de fusionar: si el cambio introduce o mantiene una versión con vulnerabilidad conocida, el PR no puede entrar en main. Uno avisa y propone; el otro bloquea.
 
+14. **`gh attestation verify`.** Demuestra que `reportaudit-1.0.0.tar.gz` lo construyó el workflow `publicar-version.yml` de mi repositorio a partir de la etiqueta v1.0.0, y que nadie lo ha modificado desde entonces: la firma Sigstore está ligada a la identidad OIDC del workflow y anotada en un registro público. No demuestra que el código sea seguro, solo de dónde viene. SHA256SUMS no basta porque solo garantiza integridad frente a errores de descarga: un atacante que sustituya el archivo puede sustituir también la lista de huellas, mientras que no puede falsificar la firma de mi workflow.
+
 15. **Canal privado y SECURITY.md.** Un Issue es público: describir allí una vulnerabilidad explicaría a cualquiera cómo atacar el producto antes de que exista la versión corregida. El canal privado permite al responsable confirmar el fallo, puntuarlo, preparar la corrección con el investigador y publicar el aviso solo cuando los usuarios pueden actualizar. SECURITY.md es la política pública que dice cómo informar, qué plazos de respuesta y divulgación se comprometen, qué versiones tienen soporte y hasta cuándo, y que no habrá acciones legales contra quien informe de buena fe.
 
 16. **Maintained = 0.** No es un problema de seguridad: Scorecard mide actividad en los últimos 90 días y el repositorio es más joven, así que no tiene datos. Enseña que una métrica sin contexto engaña: la nota global (6.8) baja por checks que describen la edad o el tamaño del equipo, no por vulnerabilidades. Hay que leer el porqué de cada check antes de sacar conclusiones, y usar la nota para priorizar mejoras o comparar dependencias, no como certificación.
@@ -209,7 +215,7 @@ Evidencias: [SBOM antes](evidencias/sbom.cyclonedx.json) / [después](evidencias
 | #10 | Publish a security policy and a private vulnerability reporting channel | #25 + simulacro GHSA-cvmm-mxqm-7ch3 (borrador, no publicado) + cierre manual |
 | #11 | Release v1.0.0 with an SBOM and signed provenance | #26 + Release v1.0.0 + cierre manual tras R.3 |
 | #12 | Measure supply-chain maturity with OpenSSF Scorecard | #27 |
-| #13 | Build the CRA evidence index |  |
+| #13 | Build the CRA evidence index | #28 |
 
 ---
 
@@ -245,6 +251,7 @@ El código actual está limpio porque la Parte M sustituyó las credenciales por
 - Severidad y vector CVSS: High 7.5 — CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:N/A:N
 - CWE: CWE-89 (SQL Injection)
 - Versiones afectadas / versión corregida: < 1.0.0 / 1.0.0
+- El simulacro lo realicé con @Liria18 como investigadora externa; la revisión de los PRs la hizo mi compañero revisor (@AlbertoConesaAyala2003).
 
 **Por qué un canal privado y no un Issue:** un Issue público revelaría cómo atacar ReportAudit antes de que exista la versión corregida. El borrador privado permite confirmar, puntuar y preparar la corrección con el investigador, y publicar el aviso solo cuando los usuarios ya pueden actualizar. La obligación de notificación de la CRA (P2) se activaría si la vulnerabilidad se estuviera explotando activamente; en este simulacro no hay explotación activa y el fallo ya está corregido, así que no se activa.
 
@@ -265,7 +272,7 @@ Release: https://github.com/matteoconcio/reportaudit-lab/releases/tag/v1.0.0 (wo
 
 ### S. Madurez (OpenSSF Scorecard)
 
-Informe: https://scorecard.dev/viewer/?uri=github.com/matteoconcio/reportaudit-lab (Scorecard v5.5.0, 26/11/2026). Workflow `scorecard.yml` en main (PR #NN).
+Informe: https://scorecard.dev/viewer/?uri=github.com/matteoconcio/reportaudit-lab (Scorecard v5.5.0, 26/11/2026). Workflow `scorecard.yml` en main (PR #27).
 
 | Check | Puntuación (0–10) | Qué la explica |
 |---|---|---|
@@ -290,3 +297,5 @@ Informe: https://scorecard.dev/viewer/?uri=github.com/matteoconcio/reportaudit-l
 Ver `docs/cra/expediente-evidencias.md`.
 
 Compara el expediente con tu respuesta B5 de la Práctica 2: ¿qué evidencia imaginaste que ahora existe de verdad, y cuál sigue sin existir?
+
+En la Práctica 2 (CRA) relacionamos en teoría los requisitos del Anexo I con prácticas y herramientas: SAST y SCA en el pipeline, SBOM, escaneo de secretos, política de divulgación coordinada, actualizaciones firmadas y un período de soporte de 5 años. Ahora casi todo eso existe de verdad y se puede comprobar: checks obligatorios en cada PR (SonarQube Cloud, CodeQL, pip-audit, Gitleaks), SBOM CycloneDX atestado en la Release v1.0.0, procedencia firmada con Sigstore que cualquiera verifica con `gh attestation verify`, SECURITY.md con soporte hasta 2031-11-30, canal privado y un borrador de aviso (GHSA-cvmm-mxqm-7ch3). Lo que sigue sin existir es la parte documental y de gestión: la evaluación de riesgos documentada (Art. 13.2–13.3), la documentación técnica completa del Anexo VII, la declaración UE de conformidad y el marcado CE, y el procedimiento real de notificación del Art. 14 (24 h / 72 h / 14 días). Tampoco hay pruebas de seguridad dinámicas ni fuzzing, como señala Scorecard.
