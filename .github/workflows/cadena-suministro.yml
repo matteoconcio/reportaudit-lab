@@ -54,7 +54,7 @@ jobs:
       - name: Descargar el código
         uses: actions/checkout@v7
       - name: Preparar Python 3.12
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version: "3.12"
       - name: Auditar las dependencias con pip-audit
