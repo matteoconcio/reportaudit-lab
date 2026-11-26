@@ -176,9 +176,22 @@ Evidencias: [SBOM antes](evidencias/sbom.cyclonedx.json) / [después](evidencias
 
 9. **VEX.** Ignorar una alerta la oculta sin dejar rastro, y nadie sabrá después por qué se descartó. Un VEX es un documento revisable que dice qué vulnerabilidad, en qué componente, que no nos afecta, por qué (`justification` estándar) y quién lo decidió y cuándo. El mío declara `not_affected` para CVE-2024-34069 en `pkg:pypi/werkzeug@3.0.1`, con `vulnerable_code_not_in_execute_path`, porque solo afecta al depurador y el servicio arranca con `debug=False` (`servicio.py`, línea 64). Aun así, se actualizó.
 
-10.
-11.
-12.
+10. **Instalador de herramientas.** Fija una versión concreta de cada herramienta, descarga el archivo y la lista oficial de huellas SHA-256 del proyecto, las compara y solo instala si coinciden: detecta una descarga corrupta o alterada por el camino. No puede garantizar que la publicación oficial sea legítima: en el caso Trivy de marzo de 2026 los atacantes comprometieron el propio proyecto y reescribieron sus etiquetas, así que la huella publicada era la del binario malicioso. Por eso se fijan versiones revisadas en lugar de «la última» y los equipos más exigentes verifican además la firma de la publicación.
+
+11. **Gitleaks: código limpio, historial no.** La Parte M sustituyó las credenciales por variables de entorno, así que el código actual no las contiene; pero Git conserva todos los commits y siguen legibles en el commit de importación (3319c72), en GitHub y en cada clon. Lo que cierra el riesgo de verdad es la rotación: que esas credenciales dejen de servir. La regla propia y la baseline impiden que vuelvan a entrar sin silenciar la herramienta.
+
+12. **Por qué pip-audit no se exigió desde la Parte G (ratchet).** En la Parte G las dependencias tenían 13 vulnerabilidades conocidas: con pip-audit obligatorio, ningún PR (ni el de Semgrep, ni el de Dependabot, ni la corrección de seguridad) habría podido fusionarse. El trinquete consiste en llevar primero el sistema al nivel deseado y después prohibir retroceder: en mi repositorio, primero se actualizaron las dependencias (#20) y se registró el historial de secretos (#21), y solo entonces se añadieron pip-audit y Gitleaks como checks obligatorios (#23). Desde ese momento, el PR de prueba #24 con werkzeug 3.0.1 quedó bloqueado.
+
+13. **Alerta de Dependabot vs. check SCA - pip-audit.** La alerta de Dependabot informa de una dependencia vulnerable ya presente en el repositorio y propone un PR con la corrección, pero no impide fusionar nada. El check obligatorio pip-audit actúa en cada PR antes de fusionar: si el cambio introduce o mantiene una versión con vulnerabilidad conocida, el PR no puede entrar en main. Uno avisa y propone; el otro bloquea.
+
+15. **Canal privado y SECURITY.md.** Un Issue es público: describir allí una vulnerabilidad explicaría a cualquiera cómo atacar el producto antes de que exista la versión corregida. El canal privado permite al responsable confirmar el fallo, puntuarlo, preparar la corrección con el investigador y publicar el aviso solo cuando los usuarios pueden actualizar. SECURITY.md es la política pública que dice cómo informar, qué plazos de respuesta y divulgación se comprometen, qué versiones tienen soporte y hasta cuándo, y que no habrá acciones legales contra quien informe de buena fe.
+
+16. **Maintained = 0.** No es un problema de seguridad: Scorecard mide actividad en los últimos 90 días y el repositorio es más joven, así que no tiene datos. Enseña que una métrica sin contexto engaña: la nota global (6.8) baja por checks que describen la edad o el tamaño del equipo, no por vulnerabilidades. Hay que leer el porqué de cada check antes de sacar conclusiones, y usar la nota para priorizar mejoras o comparar dependencias, no como certificación.
+
+17.
+
+
+
 
 ## Backlog del laboratorio (Issues)
 
@@ -187,15 +200,15 @@ Evidencias: [SBOM antes](evidencias/sbom.cyclonedx.json) / [después](evidencias
 | #1 | Adopt an international pull request template | #14 |
 | #2 | Run SAST (SonarQube Cloud and CodeQL) on every pull request | #15 |
 | #3 | Block insecure commits with a Semgrep pre-commit hook | #16 |
-| #4 | Enable Dependabot alerts and security updates | #17 |
+| #4 | Enable Dependabot alerts and security updates | #17 + cierre manual tras analizar la primera alerta (I.3) |
 | #5 | Remediate the findings of the security audit | #19 |
-| #6 | Upgrade the vulnerable dependencies | #20 |
-| #7 | Publish the audit log and the before/after evidence |  |
-| #8 | Detect ReportAudit credentials in the whole Git history |  |
-| #9 | Make SCA and secret scanning required checks on main |  |
-| #10 | Publish a security policy and a private vulnerability reporting channel |  |
-| #11 | Release v1.0.0 with an SBOM and signed provenance |  |
-| #12 | Measure supply-chain maturity with OpenSSF Scorecard |  |
+| #6 | Upgrade the vulnerable dependencies | #20 (PR de Dependabot, vinculado desde Development) |
+| #7 | Publish the audit log and the before/after evidence | #22 |
+| #8 | Detect ReportAudit credentials in the whole Git history | #21 |
+| #9 | Make SCA and secret scanning required checks on main | #23 + PR de prueba #24 (cerrado sin fusionar) + cierre manual tras P.4 |
+| #10 | Publish a security policy and a private vulnerability reporting channel | #25 + simulacro GHSA-cvmm-mxqm-7ch3 (borrador, no publicado) + cierre manual |
+| #11 | Release v1.0.0 with an SBOM and signed provenance | #26 + Release v1.0.0 + cierre manual tras R.3 |
+| #12 | Measure supply-chain maturity with OpenSSF Scorecard | #27 |
 | #13 | Build the CRA evidence index |  |
 
 ---
@@ -218,36 +231,59 @@ El código actual está limpio porque la Parte M sustituyó las credenciales por
 
 | Check | ¿Exigido en main? | Resultado en el PR de prueba (test/puerta-sca) |
 |---|---|---|
-| SAST - SonarQube Cloud | | |
-| SAST - CodeQL | | |
-| SCA - pip-audit | | |
-| Secretos - Gitleaks | | |
+| SAST - SonarQube Cloud | Sí (desde G.6) | Verde (el código no cambia) |
+| SAST - CodeQL | Sí (desde G.6) | Verde |
+| SCA - pip-audit | Sí (desde P.4) | **Rojo**: werkzeug 3.0.1 con vulnerabilidades conocidas; PR cerrado sin fusionar |
+| Secretos - Gitleaks | Sí (desde P.4) | Verde |
+
+**Dependabot vs. pip-audit:** una alerta de Dependabot avisa y propone un PR, pero no impide fusionar nada; el check obligatorio SCA - pip-audit convierte "hay una vulnerabilidad conocida" en "este PR no entra en main". **Por qué no se exigió en la Parte G (trinquete):** con las dependencias vulnerables de entonces, ningún PR (ni el de Semgrep ni el de Dependabot) habría podido fusionarse. Primero se llevó el repositorio a un estado limpio (#20) y solo después se prohibió retroceder (#23).
 
 ### Q. Divulgación coordinada (simulacro)
 
-- Informe recibido de (usuario de GitHub):
-- Identificador del borrador de aviso (GHSA-…):
-- Severidad y vector CVSS:
-- CWE:
-- Versiones afectadas / versión corregida:
+- Informe recibido de (usuario de GitHub): @Liria18
+- Identificador del borrador de aviso (GHSA-…): GHSA-cvmm-mxqm-7ch3
+- Severidad y vector CVSS: High 7.5 — CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:N/A:N
+- CWE: CWE-89 (SQL Injection)
+- Versiones afectadas / versión corregida: < 1.0.0 / 1.0.0
+
+**Por qué un canal privado y no un Issue:** un Issue público revelaría cómo atacar ReportAudit antes de que exista la versión corregida. El borrador privado permite confirmar, puntuar y preparar la corrección con el investigador, y publicar el aviso solo cuando los usuarios ya pueden actualizar. La obligación de notificación de la CRA (P2) se activaría si la vulnerabilidad se estuviera explotando activamente; en este simulacro no hay explotación activa y el fallo ya está corregido, así que no se activa.
 
 ### R. Versión 1.0.0 verificable
 
+Release: https://github.com/matteoconcio/reportaudit-lab/releases/tag/v1.0.0 (workflow `publicar-version.yml`, PR #26, etiqueta anotada `v1.0.0`).
+
 | Comprobación | Comando | Resultado |
 |---|---|---|
-| Huellas SHA-256 | `sha256sum -c SHA256SUMS` | |
-| Procedencia (SLSA) | `gh attestation verify reportaudit-1.0.0.tar.gz --repo …` | |
-| SBOM atestado | `gh attestation verify … --predicate-type https://cyclonedx.org/bom` | |
-| Archivo alterado | `gh attestation verify alterado.tar.gz --repo …` | |
+| Huellas SHA-256 | `sha256sum -c SHA256SUMS` | OK para `reportaudit-1.0.0.tar.gz` y `reportaudit-sbom.cdx.json` |
+| Procedencia (SLSA) | `gh attestation verify reportaudit-1.0.0.tar.gz --repo matteoconcio/reportaudit-lab` | ✓ Verification succeeded (workflow publicar-version.yml, refs/tags/v1.0.0) |
+| SBOM atestado | `gh attestation verify … --predicate-type https://cyclonedx.org/bom` | ✓ Verification succeeded |
+| Archivo alterado | `gh attestation verify alterado.tar.gz --repo …` | ✗ Falla: huella distinta y ninguna atestación para ese archivo |
+
+**Qué ataque detecta cada comprobación:** las huellas detectan una descarga incompleta o corrupta, pero no un atacante que cambie a la vez el archivo y `SHA256SUMS`. La procedencia detecta ese caso, porque la firma Sigstore liga el archivo a mi workflow, mi repositorio y mi etiqueta, y no se puede rehacer sin ellos. El SBOM atestado demuestra que el inventario publicado describe exactamente ese paquete. Ninguna de las tres detectaría código malicioso introducido **antes** de etiquetar (en un PR fusionado o en el propio workflow): eso lo cubren la revisión de PRs, los checks obligatorios y la revisión de los workflows.
+
+**Incidencia:** `gh attestation` no existía en la versión de GitHub CLI de los repositorios de Ubuntu; actualicé `gh` desde el repositorio oficial de GitHub (paquete firmado con su clave GPG).
 
 ### S. Madurez (OpenSSF Scorecard)
 
+Informe: https://scorecard.dev/viewer/?uri=github.com/matteoconcio/reportaudit-lab (Scorecard v5.5.0, 26/11/2026). Workflow `scorecard.yml` en main (PR #NN).
+
 | Check | Puntuación (0–10) | Qué la explica |
 |---|---|---|
-| Puntuación global | | |
-| | | |
-| | | |
-| | | |
+| Puntuación global | **6.8** | Media ponderada por riesgo de los checks |
+| Maintained | 0 | El repositorio tiene menos de 90 días: Scorecard no puede medir actividad sostenida. No dice nada de la seguridad del código. |
+| Pinned-Dependencies | 0 | Las acciones de los workflows se fijan por etiqueta (`@v7`, `@v4`), no por hash de commit; una etiqueta se puede mover a otro código (caso Trivy 2026). Mejora con el reto S.3. |
+| Fuzzing | 0 | ReportAudit no tiene pruebas de fuzzing (ni tests en general): fuera del alcance del laboratorio. |
+| License | 0 | El repositorio no tiene archivo `LICENSE`. |
+| Contributors | 0 | Un solo autor, sin contribuidores de varias organizaciones: es un proyecto académico individual. |
+| CII-Best-Practices | 0 | No se ha solicitado la insignia OpenSSF Best Practices. |
+| Code-Review | 7 | La mayoría de cambios entraron por PR aprobado, pero cuentan en contra el commit de importación y los dos commits directos del README (ea776b1, 5cb7485). |
+| Signed-Releases | 8 | Reconoce las firmas Sigstore de la Release v1.0.0; no llega a 10 porque no identifica un archivo de procedencia SLSA con su formato estándar (`*.intoto.jsonl`). |
+| Branch-Protection | ? | Con reglas clásicas, Scorecard necesita un token de administrador para leerlas; la protección existe (4 checks + 1 aprobación + sin bypass). |
+| Altas | 10 | Dangerous-Workflow, Token-Permissions, Dependency-Update-Tool, Security-Policy, Vulnerabilities y Binary-Artifacts confirman el trabajo de las Partes G–Q. SAST 9 y CI-Tests 9. |
+
+**Lectura con criterio:** la nota premia prácticas, no mide seguridad real. Los checks que más dicen sobre ReportAudit (Vulnerabilities 10, Token-Permissions 10, Security-Policy 10, SAST 9) están en lo alto. Los ceros que bajan la media (Maintained, Contributors, Fuzzing, CII) describen un proyecto nuevo, individual y académico, no un riesgo concreto.
+
+**Check más útil para elegir una dependencia:** Vulnerabilities (y Dependency-Update-Tool), porque dicen si hoy tiene fallos conocidos sin corregir y si alguien los vigila. **Más engañoso sin contexto:** Maintained, que da 0 a un proyecto nuevo y bien cuidado como ReportAudit, y Contributors, que penaliza a un equipo pequeño aunque revise todo por PR.
 
 ### T. Expediente de evidencias
 
