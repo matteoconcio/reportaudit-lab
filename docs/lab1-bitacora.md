@@ -188,7 +188,7 @@ Evidencias: [SBOM antes](evidencias/sbom.cyclonedx.json) / [después](evidencias
 
 16. **Maintained = 0.** No es un problema de seguridad: Scorecard mide actividad en los últimos 90 días y el repositorio es más joven, así que no tiene datos. Enseña que una métrica sin contexto engaña: la nota global (6.8) baja por checks que describen la edad o el tamaño del equipo, no por vulnerabilidades. Hay que leer el porqué de cada check antes de sacar conclusiones, y usar la nota para priorizar mejoras o comparar dependencias, no como certificación.
 
-17.
+17. **Expediente (Parte T) frente a la P2.** En la Práctica 2 (CRA) relacionamos en teoría los requisitos del Anexo I con prácticas y herramientas: SAST y SCA en el pipeline, SBOM, escaneo de secretos, política de divulgación coordinada, actualizaciones firmadas y un período de soporte de 5 años. Ahora casi todo eso existe de verdad y se puede comprobar: checks obligatorios en cada PR (SonarQube Cloud, CodeQL, pip-audit, Gitleaks), SBOM CycloneDX atestado en la Release v1.0.0, procedencia firmada con Sigstore que cualquiera verifica con `gh attestation verify`, SECURITY.md con soporte hasta 2031-11-30, canal privado y un borrador de aviso (GHSA-cvmm-mxqm-7ch3). Lo que sigue sin existir es la parte documental y de gestión: la evaluación de riesgos documentada (Art. 13.2–13.3), la documentación técnica completa del Anexo VII, la declaración UE de conformidad y el marcado CE, y el procedimiento real de notificación del Art. 14 (24 h / 72 h / 14 días). Tampoco hay pruebas de seguridad dinámicas ni fuzzing, como señala Scorecard.
 
 
 
